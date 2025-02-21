@@ -15,6 +15,7 @@ import make_network as mn
 import network_analysis as na
 import models
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyArrowPatch
 import models
 import importlib
 import igraph as ig
@@ -103,6 +104,17 @@ def make_geo_pos(school_data):
     
     return pos_geo
 
+def draw_curved_edges(G, pos, ax, rad=0.2, width=1):
+    for edge in G.edges():
+        src, dst = edge
+        if src != dst:  # Avoid self-loops
+            edge_patch = FancyArrowPatch(
+                posA=pos[src], posB=pos[dst], 
+                connectionstyle=f"arc3,rad={rad}", 
+                arrowstyle="-", color="gray", lw=width
+            )
+            ax.add_patch(edge_patch)
+
 
 def plot_transnet(trans_net, pos, highlight=[] , title='transmission network of the Nethelands', sizes='deg', ax=False):
     
@@ -125,6 +137,73 @@ def plot_transnet(trans_net, pos, highlight=[] , title='transmission network of 
     nx.draw_networkx_nodes(trans_net, pos=pos, node_size=np.array([sizes[n] for n in trans_net.nodes()])*1., node_color='DodgerBlue', alpha=0.7, linewidths=0.2, ax=ax)
     nx.draw_networkx_nodes(highlight_net, pos=pos, node_size=np.array([sizes[n] for n in highlight_net.nodes()])*1., node_color='Red', alpha=0.7, linewidths=0.2, ax=ax)
     nx.draw_networkx_edges(trans_net,  pos=pos, edgelist=trans_net.edges(), width=np.array([edge_dict[e + (0,) ] for e in trans_net.edges()]), edge_color='Grey', ax=ax, arrows=False)
+    ax.set_aspect('equal')
+    
+    ax.set_xticks([])
+    ax.set_yticks([])
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    
+    ax.set_title(title)
+    
+    return ax
+
+school_data = dl.load_schools_data()
+
+data_net = mn.build_network_alinks()
+
+vacc_dict_samples = vacc.vacc_sample_dict()
+
+nodelist = np.intersect1d(data_net.nodes(), 
+                          list(map(str,vacc_dict_samples['sample 0'].keys())))
+
+adj_mat_dt = nx.adjacency_matrix(data_net, weight='weight', 
+                                 nodelist=nodelist).toarray()
+
+nodes=np.intersect1d(nodelist, school_data.BRIN)
+
+
+
+trans_mat = create_transmat_from_adjmat(adj_mat_dt, vacc_dict_samples['sample 0'], nodelist)
+
+trans_net = create_network_from_transmat(trans_mat, nodelist)
+
+reformed_codes = np.array(school_data.query('Denomination == "Reformatorisch"').BRIN)
+
+ref_trans_net = trans_net.subgraph(nodes=reformed_codes)
+
+trans_net_loc = trans_net.subgraph(nodes=nodes)
+pos_geo = make_geo_pos(school_data)
+degree_dict = trans_net.degree(weight='weight')
+
+
+
+def plot_transnet_curved(trans_net, pos, highlight=[] , title='transmission network of the Nethelands', sizes='deg', ax=False, scale=1.):
+    
+    if ax == False:
+    
+        fig = plt.figure(figsize=[14,20])
+        ax = fig.add_subplot(111)
+    
+    
+    
+    highlight_net = trans_net.subgraph(nodes=highlight)
+    if len(sizes) != len(trans_net.nodes):
+        degree_dict = trans_net.degree(weight='weight')
+        sizes = degree_dict
+    else:
+        degree_dict = trans_net.degree(weight='weight')
+        degree_dict.values = sizes
+        sizes = degree_dict
+    edge_dict = nx.get_edge_attributes(trans_net, 'weight')
+    #return edge_dict
+    #nx.draw_networkx_nodes(trans_net, weight='weight', pos=pos, node_size=10, node_color='Grey', alpha=0.3, linewidths=0.2, ax=ax)
+    nx.draw_networkx_nodes(trans_net, pos=pos, node_size=np.array([sizes[n] for n in trans_net.nodes()])*scale, node_color='DodgerBlue', alpha=0.7, linewidths=0.2, ax=ax)
+    nx.draw_networkx_nodes(highlight_net, pos=pos, node_size=np.array([sizes[n] for n in highlight_net.nodes()])*scale, node_color='Red', alpha=0.7, linewidths=0.2, ax=ax)
+    draw_curved_edges(trans_net,  pos=pos,  ax=ax, rad=0.3)
     ax.set_aspect('equal')
     
     ax.set_xticks([])
